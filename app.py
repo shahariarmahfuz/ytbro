@@ -9,12 +9,12 @@ from urllib.parse import quote
 app = Flask(__name__)
 
 API_URL = "https://youtube-media-downloader.p.rapidapi.com/v2/video/details"
-HEADERS = {
+RAPID_HEADERS = {
     'x-rapidapi-host': "youtube-media-downloader.p.rapidapi.com",
     'x-rapidapi-key': "3d74cfda87msh25f14e67ab30bacp106cdfjsnc33f950ca32f"
 }
 
-# Docker কন্টেইনারে ffmpeg গ্লোবালি ইনস্টল থাকে, তাই শুধু নাম দিলেই চলে
+# Docker এ ffmpeg গ্লোবাল থাকে
 FFMPEG_PATH = 'ffmpeg'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -40,18 +40,29 @@ def get_best_media(data):
     return best_video, best_audio
 
 def download_stream(url, filepath):
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    # সমস্যা সমাধানের জন্য এই হেডারগুলো যোগ করা হয়েছে
+    dl_headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.youtube.com/',
+        'Origin': 'https://www.youtube.com',
+        'Accept': '*/*',
+        'Connection': 'keep-alive',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'cross-site',
+    }
+    
     try:
-        with requests.get(url, stream=True, headers=headers) as r:
-            r.raise_for_status()
+        with requests.get(url, stream=True, headers=dl_headers) as r:
+            r.raise_for_status() # 403 হলে এখানে এরর দেখাবে
             with open(filepath, 'wb') as f:
-                # 1MB Chunk Size for High Speed inside Docker
                 for chunk in r.iter_content(chunk_size=1024 * 1024): 
                     if chunk:
                         f.write(chunk)
     except Exception as e:
-        print(f"Download Error: {e}")
-        raise e
+        print(f"Download Failed: {e}")
+        # যদি 403 এরর হয়, তার মানে এই লিংকটি আইপি লকড
+        raise Exception(f"YouTube 403 Forbidden (IP Mismatch). Server IP blocked.")
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -65,7 +76,7 @@ def index():
         if video_id:
             querystring = {"videoId": video_id, "urlAccess": "normal", "videos": "auto", "audios": "auto"}
             try:
-                response = requests.get(API_URL, headers=HEADERS, params=querystring)
+                response = requests.get(API_URL, headers=RAPID_HEADERS, params=querystring)
                 data = response.json()
 
                 if "errorId" in data and data["errorId"] == "Success":
@@ -120,10 +131,11 @@ def merge_download():
     output_file_path = os.path.join(BASE_DIR, f"{safe_title}_{unique_id}.mp4")
 
     try:
+        # ডাউনলোড শুরু
         download_stream(video_url, temp_video_path)
         download_stream(audio_url, temp_audio_path)
 
-        # Docker এর ভেতরে ffmpeg কমান্ড রান হবে
+        # মার্জিং
         command = [
             FFMPEG_PATH, '-i', temp_video_path, '-i', temp_audio_path, 
             '-c:v', 'copy', '-c:a', 'aac', output_file_path, '-y'
@@ -144,10 +156,10 @@ def merge_download():
         return send_file(output_file_path, as_attachment=True)
 
     except Exception as e:
+        # এরর হলে ক্লিনআপ
         if os.path.exists(temp_video_path): os.remove(temp_video_path)
         if os.path.exists(temp_audio_path): os.remove(temp_audio_path)
-        return f"Processing Error: {str(e)}"
+        return f"Download Failed (403 Forbidden or Network Error): {str(e)}"
 
 if __name__ == '__main__':
-    # Docker কন্টেইনারে 0.0.0.0 মাস্ট
     app.run(host='0.0.0.0', port=5477, threaded=True)
