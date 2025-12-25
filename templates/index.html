@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docker YT Downloader</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f4; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { background: white; padding: 30px; border-radius: 10px; width: 100%; max-width: 500px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        input { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { background: #e62117; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; width: 100%; font-size: 16px; }
+        .result { margin-top: 20px; text-align: left; }
+        .merge-btn { display: block; background: #28a745; color: white; text-align: center; padding: 12px; text-decoration: none; border-radius: 5px; margin-bottom: 20px; }
+        .direct-links { display: flex; gap: 10px; }
+        .direct-links a { flex: 1; text-align: center; background: #007bff; color: white; padding: 10px; text-decoration: none; border-radius: 5px; font-size: 14px; }
+        .direct-links a.audio { background: #6c757d; }
+        img { width: 100%; border-radius: 10px; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Video Downloader</h2>
+    <form method="POST">
+        <input type="text" name="url" placeholder="Paste YouTube Link Here..." required>
+        <button type="submit">Search</button>
+    </form>
+    {% if error %} <p style="color:red; text-align:center;">{{ error }}</p> {% endif %}
+    {% if data %}
+    <div class="result">
+        <img src="{{ data.thumbnail }}">
+        <h3 style="font-size:16px;">{{ data.title }}</h3>
+        
+        <a href="/processing?v={{ data.safe_video_url }}&a={{ data.safe_audio_url }}&t={{ data.title }}" class="merge-btn">
+            Download High Quality (Merged)
+        </a>
+        
+        <div style="text-align:center; margin:10px; color:#888;">--- OR Direct Links ---</div>
+        
+        <div class="direct-links">
+            {% if data.direct_video %}
+            <a href="{{ data.direct_video.url }}" target="_blank">Video Only ({{ data.direct_video.quality }})</a>
+            {% endif %}
+            {% if data.direct_audio %}
+            <a href="{{ data.direct_audio.url }}" target="_blank" class="audio">Audio Only</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+</body>
+</html>
